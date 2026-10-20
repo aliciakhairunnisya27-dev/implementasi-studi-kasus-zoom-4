@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Pemantauan Akademik Prodi Informatika</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef2f5;--panel:#fff;--ink:#1b2a35;--muted:#52636f;--line:#d5dde3;--head:#12394f;
+--baik:#0072B2;--perhatian:#E69F00;--berisiko:#D55E00;--a2022:#CC79A7;--a2023:#56B4E9;--a2024:#009E73;--focus:#1b2a35}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Source Sans 3",system-ui,sans-serif}
+header{background:var(--head);color:#fff;padding:20px 24px}
+header h1{margin:0;font-size:1.4rem}
+header p{margin:4px 0 0;max-width:70ch;color:#cfe0ea}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 40px}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:16px}
+label{display:flex;flex-direction:column;font-weight:600;font-size:.9rem;gap:4px}
+select,button{font:inherit;padding:8px 12px;border:1px solid #8fa0ab;border-radius:6px;background:#fff;color:var(--ink);min-height:40px}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.kpi,.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.kpi b{display:block;font-size:1.7rem;line-height:1.2}
+.kpi span{color:var(--muted);font-size:.9rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+.card h2{margin:0 0 2px;font-size:1.05rem}
+.card .sub{margin:0 0 8px;color:var(--muted);font-size:.9rem}
+svg{width:100%;height:auto;display:block}
+svg text{font-family:inherit;fill:var(--ink);font-size:12px}
+.axis{stroke:var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.85rem;margin-top:6px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.pt{cursor:pointer;stroke:#fff;stroke-width:1}
+.pt.sel{stroke:var(--ink);stroke-width:3}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+td button{border:0;background:none;padding:0;min-height:0;color:#0b4f7a;text-decoration:underline;font-weight:600}
+dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:8px 0 0}
+dt{color:var(--muted)} dd{margin:0;font-weight:600}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+.wide{grid-column:1/-1}
+@media (prefers-reduced-motion:no-preference){.pt{transition:r .15s}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pemantauan Akademik Prodi Informatika</h1>
+  <p>Lihat ringkasan kondisi mahasiswa, lalu saring dan buka detail untuk menentukan siapa yang perlu didampingi. Data di halaman ini data simulasi.</p>
+</header>
+<main>
+  <div class="filters" role="group" aria-label="Filter data">
+    <label>Angkatan
+      <select id="fAng"><option value="all">Semua angkatan</option><option>2022</option><option>2023</option><option>2024</option></select>
+    </label>
+    <label>Status
+      <select id="fSt"><option value="all">Semua status</option><option>Baik</option><option>Perlu perhatian</option><option>Berisiko</option></select>
+    </label>
+    <button id="reset" type="button">Atur ulang filter</button>
+  </div>
+
+  <section class="kpis" aria-label="Ringkasan" id="kpis"></section>
+
+  <div class="grid" id="grid">
+    <section class="card"><h2>Tren rata-rata IPK per semester</h2><p class="sub">Garis per angkatan. Batas risiko: IPK 2,5.</p><div id="line"></div></section>
+    <section class="card"><h2>Rata-rata nilai per mata kuliah</h2><p class="sub">Skala 0–100. Mata kuliah terendah ada di bawah.</p><div id="bar"></div></section>
+    <section class="card"><h2>Kehadiran dan IPK</h2><p class="sub">Satu titik = satu mahasiswa. Arahkan, fokus, atau klik titik untuk melihat detail.</p><div id="scatter"></div><div class="legend" id="stLegend"></div></section>
+    <section class="card"><h2>Proporsi status mahasiswa</h2><p class="sub">Berdasarkan IPK terakhir: Baik ≥ 3,0; Perlu perhatian 2,5–2,99; Berisiko &lt; 2,5.</p><div id="donut"></div></section>
+    <section class="card" aria-live="polite"><h2>Detail mahasiswa</h2><div id="detail"></div></section>
+    <section class="card"><h2>Enam IPK terendah</h2><p class="sub">Pilih nama untuk membuka detail.</p><div id="tbl"></div></section>
+  </div>
+</main>
+
+<script>
+/* ---------- Data simulasi (seed tetap supaya hasil selalu sama) ---------- */
+function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(2026), noise=()=>(R()+R()+R()-1.5)/1.5, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const COURSES=[["Pemrograman Dasar",4],["Struktur Data",-3],["Basis Data",2],["Jaringan Komputer",-1],["Interaksi Manusia dan Komputer",5],["Statistika",-6]];
+const SEMS={2022:6,2023:4,2024:2};
+const students=Array.from({length:150},(_,i)=>{
+  const ang=[2022,2023,2024][i%3], att=clamp(Math.round(72+noise()*22),50,100);
+  const base=clamp(1.3+(att-50)/50*2+noise()*0.4,1.2,3.95);
+  const ipk=Array.from({length:SEMS[ang]},()=>+clamp(base+noise()*0.2,1,4).toFixed(2));
+  const last=ipk[ipk.length-1];
+  const nilai=COURSES.map(([n,o])=>Math.round(clamp(last/4*100+o+noise()*8,30,100)));
+  const status=last>=3?"Baik":last>=2.5?"Perlu perhatian":"Berisiko";
+  return{id:i+1,nama:"Mhs-"+String(i+1).padStart(3,"0"),ang,att,ipk,last,nilai,status};
+});
+
+/* ---------- Util ---------- */
+const $=s=>document.querySelector(s), f1=v=>v.toFixed(2).replace(".",","), mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const STC={"Baik":"var(--baik)","Perlu perhatian":"var(--perhatian)","Berisiko":"var(--berisiko)"};
+const ANGC={2022:"var(--a2022)",2023:"var(--a2023)",2024:"var(--a2024)"};
+const state={ang:"all",st:"all",sel:null};
+const data=()=>students.filter(s=>(state.ang==="all"||s.ang==+state.ang)&&(state.st==="all"||s.status===state.st));
+const empty=()=>'<div class="empty">Tidak ada mahasiswa untuk filter ini. Ubah filter atau pilih “Atur ulang filter”.</div>';
+
+/* ---------- Komponen ---------- */
+function kpis(d){
+  if(!d.length){$("#kpis").innerHTML="";return}
+  const risk=d.filter(s=>s.status==="Berisiko").length;
+  const items=[[d.length,"mahasiswa ditampilkan"],[f1(mean(d.map(s=>s.last))),"rata-rata IPK terakhir"],[Math.round(mean(d.map(s=>s.att)))+"%","rata-rata kehadiran"],[Math.round(risk/d.length*100)+"%","mahasiswa berstatus Berisiko"]];
+  $("#kpis").innerHTML=items.map(([v,l])=>`<div class="kpi"><b>${v}</b><span>${l}</span></div>`).join("");
+}
+function line(d){
+  if(!d.length)return $("#line").innerHTML=empty();
+  const W=560,H=300,L=40,Rr=64,T=14,B=30, x=s=>L+(s-1)/5*(W-L-Rr), y=v=>H-B-(v-2)/2*(H-T-B);
+  let g="",out="",desc=[];
+  for(let v=2;v<=4;v+=.5)g+=`<line class="axis" x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${f1(v).replace(",00",",0")}</text>`;
+  for(let s=1;s<=6;s++)g+=`<text x="${x(s)}" y="${H-8}" text-anchor="middle">Sem ${s}</text>`;
+  g+=`<line x1="${L}" x2="${W-Rr}" y1="${y(2.5)}" y2="${y(2.5)}" stroke="var(--berisiko)" stroke-dasharray="5 4"/>`;
+  [2022,2023,2024].forEach(a=>{
+    const grp=d.filter(s=>s.ang===a); if(!grp.length)return;
+    const pts=[];for(let s=1;s<=SEMS[a];s++){const v=grp.map(m=>m.ipk[s-1]).filter(n=>n!=null);if(v.length)pts.push([s,mean(v)])}
+    out+=`<polyline fill="none" stroke="${ANGC[a]}" stroke-width="3" points="${pts.map(p=>x(p[0])+","+y(p[1])).join(" ")}"/>`+pts.map(p=>`<circle cx="${x(p[0])}" cy="${y(p[1])}" r="4" fill="${ANGC[a]}"><title>Angkatan ${a}, semester ${p[0]}: IPK ${f1(p[1])}</title></circle>`).join("");
+    const e=pts[pts.length-1];out+=`<text x="${x(e[0])+8}" y="${y(e[1])+4}" font-weight="700">${a}</text>`;
+    desc.push(`Angkatan ${a}: IPK semester ${e[0]} ${f1(e[1])}`);
+  });
+  $("#line").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik garis tren IPK. ${desc.join("; ")}">${g}${out}</svg>`;
+}
+function bar(d){
+  if(!d.length)return $("#bar").innerHTML=empty();
+  const rows=COURSES.map(([n],i)=>[n,mean(d.map(s=>s.nilai[i]))]).sort((a,b)=>b[1]-a[1]);
+  const W=560,LB=190,RH=40,H=rows.length*RH+10,sc=v=>v/100*(W-LB-50);
+  const min=Math.min(...rows.map(r=>r[1]));
+  const s=rows.map((r,i)=>`<text x="${LB-8}" y="${i*RH+24}" text-anchor="end">${r[0].replace("Interaksi Manusia dan Komputer","Interaksi Manusia-Komputer")}</text><rect x="${LB}" y="${i*RH+8}" width="${sc(r[1])}" height="22" rx="3" fill="${r[1]===min?"var(--berisiko)":"var(--baik)"}"/><text x="${LB+sc(r[1])+6}" y="${i*RH+24}" font-weight="700">${Math.round(r[1])}</text>`).join("");
+  $("#bar").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik batang nilai per mata kuliah. Tertinggi ${rows[0][0]} ${Math.round(rows[0][1])}, terendah ${rows[rows.length-1][0]} ${Math.round(min)}">${s}</svg>`;
+}
+function scatter(d){
+  if(!d.length)return $("#scatter").innerHTML=empty();
+  const W=560,H=300,L=44,T=12,B=36,Rr=12, x=v=>L+(v-50)/50*(W-L-Rr), y=v=>H-B-(v-1)/3*(H-T-B);
+  let g="";
+  for(let v=1;v<=4;v++)g+=`<line class="axis" x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+  for(let v=50;v<=100;v+=10)g+=`<text x="${x(v)}" y="${H-18}" text-anchor="middle">${v}%</text>`;
+  g+=`<text x="${(L+W)/2}" y="${H-3}" text-anchor="middle" fill="var(--muted)">Kehadiran</text>`;
+  const pts=d.map(s=>`<circle class="pt${state.sel===s.id?" sel":""}" tabindex="0" role="button" data-id="${s.id}" cx="${x(s.att)}" cy="${y(s.last)}" r="5.5" fill="${STC[s.status]}" aria-label="${s.nama}, kehadiran ${s.att}%, IPK ${f1(s.last)}, ${s.status}"/>`).join("");
+  $("#scatter").innerHTML=`<svg viewBox="0 0 ${W} ${H}" aria-label="Diagram sebar kehadiran terhadap IPK, ${d.length} titik">${g}${pts}</svg>`;
+}
+function legend(){$("#stLegend").innerHTML=Object.keys(STC).map(k=>`<span><i style="background:${STC[k]}"></i>${k}</span>`).join("")}
+function donut(d){
+  if(!d.length)return $("#donut").innerHTML=empty();
+  const keys=Object.keys(STC), cnt=keys.map(k=>d.filter(s=>s.status===k).length), tot=d.length, C=2*Math.PI*60;
+  let off=0,arcs="";
+  cnt.forEach((c,i)=>{const len=c/tot*C;arcs+=`<circle r="60" cx="90" cy="90" fill="none" stroke="${STC[keys[i]]}" stroke-width="28" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"/>`;off+=len});
+  const lg=keys.map((k,i)=>`<div class="legend" style="margin:6px 0"><span><i style="background:${STC[k]}"></i>${k}: <b>${cnt[i]}</b> (${Math.round(cnt[i]/tot*100)}%)</span></div>`).join("");
+  $("#donut").innerHTML=`<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 180 180" style="width:180px" role="img" aria-label="Diagram donat status: ${keys.map((k,i)=>k+" "+cnt[i]).join(", ")}">${arcs}</svg><div>${lg}</div></div>`;
+}
+function detail(){
+  const s=students.find(m=>m.id===state.sel);
+  if(!s)return $("#detail").innerHTML='<p class="sub">Arahkan atau pilih titik pada diagram sebar, atau pilih nama pada tabel.</p>';
+  $("#detail").innerHTML=`<dl><dt>Mahasiswa</dt><dd>${s.nama}</dd><dt>Angkatan</dt><dd>${s.ang}</dd><dt>Kehadiran</dt><dd>${s.att}%</dd><dt>IPK terakhir</dt><dd>${f1(s.last)}</dd><dt>Status</dt><dd style="color:${STC[s.status]}">${s.status}</dd>${COURSES.map(([n],i)=>`<dt>${n}</dt><dd>${s.nilai[i]}</dd>`).join("")}</dl>`;
+}
+function table(d){
+  if(!d.length)return $("#tbl").innerHTML=empty();
+  const rows=[...d].sort((a,b)=>a.last-b.last).slice(0,6);
+  $("#tbl").innerHTML=`<table><thead><tr><th>Mahasiswa</th><th>Angkatan</th><th>Kehadiran</th><th>IPK</th></tr></thead><tbody>${rows.map(s=>`<tr><td><button type="button" data-id="${s.id}">${s.nama}</button></td><td>${s.ang}</td><td>${s.att}%</td><td>${f1(s.last)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+/* ---------- Render & event ---------- */
+function render(){const d=data();kpis(d);line(d);bar(d);scatter(d);donut(d);table(d);detail()}
+function pick(id){state.sel=+id;detail();document.querySelectorAll(".pt").forEach(p=>p.classList.toggle("sel",+p.dataset.id===state.sel))}
+$("#fAng").onchange=e=>{state.ang=e.target.value;render()};
+$("#fSt").onchange=e=>{state.st=e.target.value;render()};
+$("#reset").onclick=()=>{state.ang=state.st="all";state.sel=null;$("#fAng").value=$("#fSt").value="all";render()};
+document.addEventListener("click",e=>{const t=e.target.closest("[data-id]");if(t)pick(t.dataset.id)});
+document.addEventListener("mouseover",e=>{const t=e.target.closest(".pt");if(t)pick(t.dataset.id)});
+document.addEventListener("focusin",e=>{const t=e.target.closest(".pt");if(t)pick(t.dataset.id)});
+document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("pt")){e.preventDefault();pick(e.target.dataset.id)}});
+legend();render();
+</script>
+</body>
+</html>
